@@ -341,7 +341,7 @@ class GeneradorDatos:
                 if ventas:
                     df_ventas = pd.DataFrame(ventas)
                     (paths["ventas"] / f"Venta_Clientes_{fecha_str}.csv").write_text(
-                        df_ventas.to_csv(index=False, encoding="utf-8"),
+                        df_ventas.to_csv(index=False, encoding="utf-8", lineterminator="\n"),
                         encoding="utf-8",
                     )
 
@@ -362,7 +362,7 @@ class GeneradorDatos:
 
                 df_stock = pd.DataFrame(stock_data)
                 (paths["stock"] / f"StockPeriodo_{fecha_str}.csv").write_text(
-                    df_stock.to_csv(index=False, encoding="utf-8"),
+                    df_stock.to_csv(index=False, encoding="utf-8", lineterminator="\n"),
                     encoding="utf-8",
                 )
 
@@ -397,7 +397,7 @@ class GeneradorDatos:
 
                     df_maestro = pd.DataFrame(maestro_data)
                     (paths["maestro"] / f"Maestro_{fecha_str}.csv").write_text(
-                        df_maestro.to_csv(index=False, encoding="utf-8"),
+                        df_maestro.to_csv(index=False, encoding="utf-8", lineterminator="\n"),
                         encoding="utf-8",
                     )
 
@@ -439,10 +439,10 @@ def main() -> None:
     output_path = Path("data")
 
     config = {
-        "cant_distribuidores": 5,
-        "cant_dias": 93,
-        "clientes_por_dist": 50,
-        "seed": 42,
+        "cant_distribuidores": 3, # Valores originales: 5
+        "cant_dias": 7, # Valores originales: 93
+        "clientes_por_dist": 5, # Valores originales: 50
+        "seed": 42, # Valores originales: 42
     }
 
     print("Generador de Datos")
