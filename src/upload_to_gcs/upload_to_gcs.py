@@ -1,6 +1,5 @@
 """
-Subida de archivos locales a Google Cloud Storage
-respetando la estructura original del proyecto.
+Subida de archivos locales a Google Cloud Storage.
 
 Estructura destino en GCS:
 
@@ -55,7 +54,7 @@ def upload_all_files(bucket: storage.Bucket) -> None:
         base_tipo_path = LOCAL_BASE_PATH / tipo_local
 
         if not base_tipo_path.exists():
-            print(f"⚠ Carpeta no encontrada: {base_tipo_path}")
+            print(f"Carpeta no encontrada: {base_tipo_path}")
             continue
 
         for distribuidor_dir in base_tipo_path.iterdir():
