@@ -1,52 +1,29 @@
 -- =====================================================
 -- Dimensión Sucursal
--- Fuente: raw.maestro
+-- Fuente: raw.maestro (base) + raw.stock (complemento)
 -- Grano: 1 fila por sucursal
+-- Descripción: Carga todas las sucursales del maestro y agrega
+--              las sucursales de stock QUE NO EXISTEN en maestro.
 -- =====================================================
 
-CREATE TABLE IF NOT EXISTS `{{ project_id }}.dwh.dim_sucursal` (
-  sucursal_id INT64 NOT NULL,
-  distribuidor INT64,
-  provincia STRING,
-  ciudad STRING
-)
-OPTIONS (
-  description = "Dimensión de sucursales"
-);
+CREATE OR REPLACE TABLE `{{ project_id }}.dwh.dim_sucursal` AS
 
--- =====================================================
--- Carga incremental (idempotente)
--- =====================================================
-
-MERGE `{{ project_id }}.dwh.dim_sucursal` t
-USING (
-
-  SELECT
+-- 1. Tomamos todas las sucursales y distribuidores del Maestro (Fuente de Verdad)
+SELECT DISTINCT 
     sucursal AS sucursal_id,
-    distribuidor,
-    provincia,
-    ciudad
-  FROM `{{ project_id }}.raw.maestro`
+    distribuidor
+FROM `{{ project_id }}.raw.maestro`
 
-) s
-ON t.sucursal_id = s.sucursal_id
+UNION ALL
 
-WHEN MATCHED THEN
-  UPDATE SET
-    distribuidor = s.distribuidor,
-    provincia = s.provincia,
-    ciudad = s.ciudad
-
-WHEN NOT MATCHED THEN
-  INSERT (
-    sucursal_id,
-    distribuidor,
-    provincia,
-    ciudad
-  )
-  VALUES (
-    s.sucursal_id,
-    s.distribuidor,
-    s.provincia,
-    s.ciudad
-  );
+-- 2. Agregamos las de Stock, pero SOLO si NO están ya en el Maestro
+SELECT DISTINCT 
+    sucursal AS sucursal_id,
+    distribuidor
+FROM `{{ project_id }}.raw.stock`
+WHERE sucursal NOT IN (
+    SELECT DISTINCT sucursal 
+    FROM `{{ project_id }}.raw.maestro` 
+    WHERE sucursal IS NOT NULL
+)
+ORDER BY sucursal_id;
