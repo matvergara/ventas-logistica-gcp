@@ -4,7 +4,7 @@ Creación de datasets en BigQuery para el pipeline analítico.
 Este script prepara la infraestructura mínima en BigQuery:
 - raw
 - dwh
-- datamart
+- datamarts
 
 Es idempotente: puede ejecutarse múltiples veces sin romper nada.
 """
@@ -30,7 +30,7 @@ DATASETS = [
         "description": "Data Warehouse: modelo dimensional (esquema estrella)",
     },
     {
-        "dataset_id": "datamart",
+        "dataset_id": "datamarts",
         "description": "Datamarts analíticos para consumo BI (Looker Studio)",
     },
 ]
