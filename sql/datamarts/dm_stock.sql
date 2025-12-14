@@ -1,15 +1,14 @@
 -- =====================================================
--- Datamart Ventas
+-- Datamart Stock
 -- Orientado a consumo en Looker Studio
 -- =====================================================
 
-CREATE OR REPLACE VIEW `{{ project_id }}.datamarts.dm_ventas` AS
+CREATE OR REPLACE VIEW `{{ project_id }}.datamarts.dm_stock` AS
 SELECT
   -- =========================
-  -- Métricas
+  -- Métrica
   -- =========================
-  fv.venta_unidades,
-  fv.venta_importe,
+  fs.stock,
 
   -- =========================
   -- Dimensión Tiempo
@@ -23,20 +22,16 @@ SELECT
   -- Dimensiones de Negocio
   -- =========================
   dp.producto,
-  ds.provincia,
-  dc.tipo_negocio,
-  ds.distribuidor
+  ds.distribuidor,
+  ds.provincia
 
-FROM `{{ project_id }}.dwh.fact_ventas` fv
+FROM `{{ project_id }}.dwh.fact_stock` fs
 
 JOIN `{{ project_id }}.dwh.dim_fecha` df
-  ON fv.fecha = df.fecha
-
-JOIN `{{ project_id }}.dwh.dim_cliente` dc
-  ON fv.cliente_id = dc.cliente_id
+  ON fs.fecha = df.fecha
 
 JOIN `{{ project_id }}.dwh.dim_producto` dp
-  ON fv.producto_id = dp.producto_id
+  ON fs.producto_id = dp.producto_id
 
 JOIN `{{ project_id }}.dwh.dim_sucursal` ds
-  ON fv.sucursal_id = ds.sucursal_id;
+  ON fs.sucursal_id = ds.sucursal_id;
