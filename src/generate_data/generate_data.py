@@ -20,7 +20,6 @@ data/
 from __future__ import annotations
 
 import json
-import os
 import random as rd
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -28,6 +27,10 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
+
+from src.common.logger import get_logger
+
+logger = get_logger(__name__)
 
 # ====================
 # MASTER DATA
@@ -319,7 +322,7 @@ class GeneradorDatos:
         self.generar_clientes()
 
         for distribuidor in range(1, self.cant_distribuidores + 1):
-            print(f"\nGenerando datos para Distribuidor {distribuidor}...")
+            logger.info("Generando datos para Distribuidor %d...", distribuidor)
 
             paths = {
                 "ventas": output_base_path / "Archivos_VentaClientes" / f"Distribuidor_{distribuidor}",
@@ -350,7 +353,7 @@ class GeneradorDatos:
                 for sku, info in stock_actual.items():
                     stock_data.append(
                         {
-                            "sucursal": distribuidor * 100 + 1,  # mantenemos tu convención
+                            "sucursal": distribuidor * 100 + 1,
                             "fecha_cierre": fecha_str,
                             "sku": sku,
                             "producto": PRODUCTOS[sku]["nombre"],
@@ -401,7 +404,6 @@ class GeneradorDatos:
                         encoding="utf-8",
                     )
 
-        # Resumen
         self._generar_resumen(output_base_path)
 
     def _generar_resumen(self, output_base_path: Path) -> None:
@@ -427,7 +429,7 @@ class GeneradorDatos:
         with open(resumen_path, "w", encoding="utf-8") as f:
             json.dump(resumen, f, indent=2, ensure_ascii=False)
 
-        print("\nResumen de generación creado:", resumen_path)
+        logger.info("Resumen de generación creado: %s", resumen_path)
 
 
 # ====================
@@ -435,19 +437,16 @@ class GeneradorDatos:
 # ====================
 
 def main() -> None:
-    # Output local: handoff al pipeline (upload_to_gcs.py)
     output_path = Path("data")
 
     config = {
-        "cant_distribuidores": 3, # Valores originales: 5
-        "cant_dias": 7, # Valores originales: 93
-        "clientes_por_dist": 5, # Valores originales: 50
-        "seed": 42, # Valores originales: 42
+        "cant_distribuidores": 3,  # Valores originales: 5
+        "cant_dias": 7,            # Valores originales: 93
+        "clientes_por_dist": 5,    # Valores originales: 50
+        "seed": 42,
     }
 
-    print("Generador de Datos")
-    print("Salida local en:", output_path.resolve())
-    print("-" * 60)
+    logger.info("Generador de Datos | salida=%s", output_path.resolve())
 
     generador = GeneradorDatos(
         cant_distribuidores=config["cant_distribuidores"],
@@ -458,8 +457,7 @@ def main() -> None:
 
     generador.escribir_archivos_locales(output_path)
 
-    print("\nGeneración finalizada.")
-    print("Estructura creada bajo /data con ventas, stock y maestro por distribuidor.")
+    logger.info("Generación finalizada. Estructura creada bajo /data.")
 
 
 if __name__ == "__main__":

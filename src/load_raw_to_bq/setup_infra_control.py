@@ -13,20 +13,11 @@ from google.cloud import bigquery
 from google.cloud.exceptions import NotFound
 
 from src.common.gcp_auth import get_bq_client
+from src.common.logger import get_logger
+from src.config import INFRA_DATASET, CONTROL_TABLE, LOCATION
 
+logger = get_logger(__name__)
 
-# ======================
-# CONFIGURACIÓN
-# ======================
-
-DATASET_ID = "infra"
-CONTROL_TABLE_ID = "control_archivos_cargados"
-LOCATION = "US"
-
-
-# ======================
-# FUNCIONES
-# ======================
 
 def dataset_exists(client: bigquery.Client, dataset_id: str) -> bool:
     try:
@@ -57,23 +48,23 @@ def wait_table_ready(client: bigquery.Client, table_id: str, timeout: int = 60) 
 
 
 def create_infra_dataset(client: bigquery.Client) -> None:
-    dataset_ref = f"{client.project}.{DATASET_ID}"
+    dataset_ref = f"{client.project}.{INFRA_DATASET}"
 
     if dataset_exists(client, dataset_ref):
-        print(f"Dataset ya existe: {dataset_ref}")
+        logger.info("Dataset ya existe: %s", dataset_ref)
         return
 
     dataset = bigquery.Dataset(dataset_ref)
     dataset.location = LOCATION
     client.create_dataset(dataset)
-    print(f"Dataset creado: {dataset_ref}")
+    logger.info("Dataset creado: %s", dataset_ref)
 
 
 def create_control_table(client: bigquery.Client) -> None:
-    table_ref = f"{client.project}.{DATASET_ID}.{CONTROL_TABLE_ID}"
+    table_ref = f"{client.project}.{INFRA_DATASET}.{CONTROL_TABLE}"
 
     if table_exists(client, table_ref):
-        print(f"Tabla de control ya existe: {table_ref}")
+        logger.info("Tabla de control ya existe: %s", table_ref)
         return
 
     schema = [
@@ -89,26 +80,20 @@ def create_control_table(client: bigquery.Client) -> None:
 
     table = bigquery.Table(table_ref, schema=schema)
     client.create_table(table)
-    print(f"Tabla de control creada: {table_ref}")
+    logger.info("Tabla de control creada: %s", table_ref)
 
     wait_table_ready(client, table_ref)
 
 
-# ======================
-# MAIN
-# ======================
-
 def main() -> None:
     client = get_bq_client()
 
-    print("Setup infraestructura de control")
-    print(f"Proyecto: {client.project}")
-    print("-" * 60)
+    logger.info("Setup infraestructura de control | proyecto=%s", client.project)
 
     create_infra_dataset(client)
     create_control_table(client)
 
-    print("\nInfraestructura de control lista.")
+    logger.info("Infraestructura de control lista.")
 
 
 if __name__ == "__main__":

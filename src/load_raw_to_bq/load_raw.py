@@ -9,23 +9,20 @@ from datetime import datetime, timezone
 from typing import Dict, List, Set, Tuple
 
 from google.cloud import bigquery, storage
-from google.cloud.exceptions import NotFound
+from google.cloud.exceptions import GoogleCloudError, NotFound
 
 from src.common.gcp_auth import get_bq_client, get_gcs_client
+from src.common.logger import get_logger
+from src.config import (
+    BUCKET_NAME,
+    CONTROL_TABLE,
+    GCS_BASE_PATH,
+    INFRA_DATASET,
+    RAW_DATASET,
+    TABLAS_RAW,
+)
 
-
-# ======================
-# CONFIGURACIÓN
-# ======================
-
-RAW_DATASET = "raw"
-INFRA_DATASET = "infra"
-CONTROL_TABLE = "control_archivos_cargados"
-
-BUCKET_NAME = "ventas-logistica-raw"
-GCS_BASE_PATH = "data"
-
-TABLAS = ["ventas", "stock", "maestro"]
+logger = get_logger(__name__)
 
 
 # ======================
@@ -82,9 +79,7 @@ SCHEMAS = {
 # ======================
 
 def obtener_distribuidores(storage_client: storage.Client) -> list[int]:
-    """
-    Detecta distribuidores existentes en GCS bajo data/distribuidor_X/
-    """
+    """Detecta distribuidores existentes en GCS bajo data/distribuidor_X/"""
     bucket = storage_client.bucket(BUCKET_NAME)
     prefix = f"{GCS_BASE_PATH}/"
 
@@ -100,6 +95,7 @@ def obtener_distribuidores(storage_client: storage.Client) -> list[int]:
                 continue
 
     return sorted(distribuidores)
+
 
 def listar_blobs(
     storage_client: storage.Client,
@@ -215,23 +211,20 @@ def main() -> None:
     bq_client = get_bq_client()
     storage_client = get_gcs_client()
 
-    print("Carga RAW incremental")
-    print(f"Proyecto: {bq_client.project}")
-    print("-" * 60)
+    logger.info("Carga RAW incremental | proyecto=%s", bq_client.project)
 
     distribuidores = obtener_distribuidores(storage_client)
 
     for distribuidor in distribuidores:
-        for tabla in TABLAS:
-            print(f"\n➡ Distribuidor {distribuidor} | Tabla {tabla}")
-
+        for tabla in TABLAS_RAW:
             archivos = listar_blobs(storage_client, distribuidor, tabla)
             ya_cargados = obtener_ya_cargados(bq_client, tabla, distribuidor)
             pendientes = filtrar_pendientes(archivos, ya_cargados)
 
-            print(f"   Archivos en GCS: {len(archivos)}")
-            print(f"   Ya cargados: {len(ya_cargados)}")
-            print(f"   Pendientes: {len(pendientes)}")
+            logger.info(
+                "Distribuidor %d | tabla=%s | en GCS=%d, ya cargados=%d, pendientes=%d",
+                distribuidor, tabla, len(archivos), len(ya_cargados), len(pendientes),
+            )
 
             registros_control = []
 
@@ -248,12 +241,13 @@ def main() -> None:
                         "distribuidor": a["distribuidor"],
                         "fecha_actualizacion": a["fecha_actualizacion"],
                     })
-                except Exception as e:
-                    print(f"Error cargando {uri}: {e}")
+                    logger.info("Cargado: %s", uri)
+                except GoogleCloudError as e:
+                    logger.error("Error cargando %s: %s", uri, e)
 
             registrar_control(bq_client, registros_control)
 
-    print("\nCarga RAW incremental finalizada.")
+    logger.info("Carga RAW incremental finalizada.")
 
 
 if __name__ == "__main__":
