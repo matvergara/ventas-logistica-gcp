@@ -6,7 +6,7 @@ El objetivo es simular un escenario realista de operación de distribuidores, in
 
 ---
 
-## 📚 Contexto
+## Contexto
 
 El proyecto se basa en un escenario de distribución comercial con múltiples distribuidores, sucursales y clientes, donde se busca responder preguntas operativas y comerciales como:
 
@@ -17,131 +17,193 @@ El proyecto se basa en un escenario de distribución comercial con múltiples di
 
 > Dado que no se dispone de datos reales, se implementó un generador de datos sintéticos en Python que respeta reglas de negocio realistas (condiciones de venta, comportamiento de clientes, reposición de stock, etc.).
 
-## 🧱 Arquitectura de la solución
-La solución sigue una arquitectura analítica por capas:
-1. Generación de datos (Python) → 
-2. Google Cloud Storage (Data Lake) →
-3. BigQuery capa raw →
-4. Data Warehouse →
-5. Datamarts →
-6. Dashboard en Looker Studio
+---
 
-## 🧠 Decisiones de diseño
+## Arquitectura
 
-- Separación por capas para desacoplar ingesta, modelado y consumo
-- Uso de esquema estrella para facilitar análisis
-- Datamarts para simplificar la lógica en BI
-- SQL versionado y orquestación desde Python
-
-
-## 📁 Estructura del repositorio
 ```
+Generador de datos (Python)
+  → data/  (CSVs locales)
+  → Google Cloud Storage  (Data Lake)
+  → BigQuery: raw  (copia fiel de los archivos)
+  → BigQuery: dwh  (star schema: 4 dims + 2 facts)
+  → BigQuery: datamarts  (vistas para BI)
+  → Looker Studio  (dashboards)
+```
+
+### Capas de BigQuery
+
+| Dataset | Contenido | Estrategia de carga |
+|---------|-----------|---------------------|
+| `raw` | Tablas `ventas`, `stock`, `maestro` | Append incremental con control de idempotencia |
+| `dwh` | 4 dimensiones + 2 facts | Dims: reemplazo total; facts: INSERT anti-duplicado / MERGE |
+| `datamarts` | Vistas `dm_ventas`, `dm_stock` | Vistas (sin almacenamiento) |
+| `infra` | Tabla de control de cargas | Tracking por (bucket, path, generation) |
+
+### Star Schema
+
+**Dimensiones:** `dim_fecha` · `dim_cliente` · `dim_producto` · `dim_sucursal`
+
+**Hechos:**
+- `fact_ventas` — grano: producto × cliente × sucursal × fecha; métricas: unidades e importe
+- `fact_stock` — grano: producto × sucursal × fecha; métrica: stock diario
+
+---
+
+## Estructura del repositorio
+
+```
+├── run_pipeline.py           # Orquestador único del pipeline
+├── requirements.txt          # Dependencias de producción
+├── requirements-dev.txt      # Dependencias de desarrollo (pytest)
+│
 ├── src/
-│   ├── generate_data/        # Generación de datos sintéticos
-│   ├── upload_to_gcs/        # Carga de archivos a Cloud Storage
+│   ├── config.py             # Configuración centralizada (bucket, datasets, rutas)
+│   ├── common/
+│   │   ├── gcp_auth.py       # Clientes autenticados de BQ y GCS
+│   │   └── logger.py         # Logging centralizado
+│   ├── generate_data/        # Generador de datos sintéticos
+│   ├── upload_to_gcs/        # Subida de archivos a Cloud Storage
 │   ├── load_raw_to_bq/       # Ingesta RAW en BigQuery con control de idempotencia
 │   ├── dwh/                  # Orquestación del Data Warehouse
-│   ├── datamarts/            # Orquestación de Datamarts
-│   └── common/               # Utilidades comunes (auth, clientes GCP)
+│   └── datamarts/            # Orquestación de Datamarts
 │
 ├── sql/
-│   ├── dwh/                  # SQL del Data Warehouse (dimensiones y hechos)
-│   └── datamarts/            # SQL de Datamarts
+│   ├── dwh/                  # SQL del star schema (dims y facts)
+│   └── datamarts/            # SQL de datamarts (vistas)
 │
-├── requirements.txt
-└── README.md
+├── terraform/                # Infraestructura como código (GCS + BigQuery)
+│   ├── main.tf
+│   ├── variables.tf
+│   ├── storage.tf
+│   ├── bigquery.tf
+│   └── outputs.tf
+│
+└── tests/                    # Tests unitarios (sin dependencia de GCP)
+    ├── test_generate_data.py
+    └── test_load_raw.py
 ```
 
-## 🧮 Data Warehouse
+---
 
-El ***Data Warehouse*** está modelado bajo un esquema estrella, separando dimensiones y tablas de hechos.
-Dimensiones:
-- `dim_fecha`
-- `dim_cliente`
-- `dim_producto`
-- `dim_sucursal`
+## Replicar el proyecto
 
-Hechos:
-- `fact_ventas`
-- `fact_stock` 
+### Prerequisitos
 
-La carga es incremental e idempotente, permitiendo la reejecución del pipeline sin duplicación de datos. 
-Se implementa una tabla de control para evitar reprocesos y duplicación de archivos provenientes de ***Cloud Storage***.
+| Herramienta | Versión mínima | Instalación |
+|-------------|----------------|-------------|
+| Python | 3.10+ | [python.org](https://www.python.org/downloads/) |
+| gcloud CLI | cualquiera | [cloud.google.com/sdk](https://cloud.google.com/sdk/docs/install) |
+| Terraform | 1.5+ | [developer.hashicorp.com/terraform](https://developer.hashicorp.com/terraform/install) |
 
-## 📊 Datamarts
+También necesitás un **proyecto de GCP** con billing habilitado. El costo es prácticamente cero para el volumen de datos de este proyecto (ambos servicios tienen free tier).
 
-Para facilitar el consumo analítico y simplificar la lógica en herramientas de BI, se construyó una capa de ***datamarts*** sobre el *Data Warehouse*.
+---
 
-Los *datamarts* se implementan como vistas en ***BigQuery*** y están orientados al consumo analítico.
+### 1. Clonar el repositorio
 
-### Datamart de Ventas (`dm_ventas`)
-Incluye métricas y dimensiones necesarias para el análisis comercial:
-- Unidades vendidas
-- Importe vendido
-- Producto
-- Provincia
-- Tipo de negocio
-- Sucursal
-- Dimensiones temporales (año, mes, semana ISO)
-
-### Datamart de Stock (`dm_stock`)
-Orientado al análisis operativo y logístico:
-- Stock diario por producto y distribuidor
-- Métricas agregables (promedio, mínimo, desvío estándar)
-- Dimensiones temporales (año, mes, semana ISO)
-
-## 📈 Business Intelligence
-
-Los *datamarts* se conectan a ***Looker Studio*** para la visualización de indicadores clave.
-
-Se desarrollaron *dashboards* con foco en:
-- Análisis de ventas
-- Distribución geográfica
-- Desempeño por producto y tipo de negocio
-- Control de stock y variabilidad
-
-La capa de BI se apoya exclusivamente en los *datamarts*, evitando *joins* y lógica compleja en la herramienta de visualización.
-
-[Clickea aquí para visualizar el Dashboard](https://lookerstudio.google.com/reporting/15bc3841-a472-4f1c-9b98-7ece170edba9/page/N89dF)
-
-## ➡️ Ejecución del pipeline
-1. Generación de datos sintéticos.
 ```bash
-python -m src.generate_data.generate_data
-```
-2. Carga de archivos en Cloud Storage.
-```bash
-python -m src.upload_to_gcs.upload_to_gcs
-```
-3. Ingesta incremental en BigQuery raw.
-    a. Creacion de capas raw, dwh y datamarts si no existen:
-    ```bash
-    python -m src.load_raw_to_bq.setup_datasets
-    ```
-    b. Creacion de tabla de control
-    ```bash
-    python -m src.load_raw_to_bq.setup_infra_control
-    ```
-    c. Ingesta de datos desde Cloud Storage a raw
-    ```bash
-    python -m src.load_raw_to_bq.load_raw
-    ```
-4. Ejecución del Data Warehouse.
-```bash
-python -m src.dwh.run_dwh
-```
-5. Ejecución de Datamarts
-```bash
-python -m src.datamarts.run_datamarts
+git clone https://github.com/TU_USUARIO/ventas-logistica-gcp.git
+cd ventas-logistica-gcp
 ```
 
-## 🛠️ Tecnologías utilizadas
-- Python
-- Google Cloud Storage
-- Google BigQuery
-- SQL
-- Looker Studio
+### 2. Crear entorno virtual e instalar dependencias Python
 
-## 🧑‍💻 Autores | Contacto
-- **Emanuel Pinasco** • [LinkedIn](https://www.linkedin.com/in/bruno-inguanzo-974021212/)
-- **Matías Vergara** • [LinkedIn](https://www.linkedin.com/in/matiasvergaravicencio/)
+```bash
+python -m venv .venv
+
+# Linux / macOS
+source .venv/bin/activate
+
+# Windows
+.venv\Scripts\activate
+
+pip install -r requirements.txt
+```
+
+### 3. Autenticarse en GCP
+
+```bash
+gcloud auth login
+gcloud auth application-default login
+gcloud config set project TU_PROJECT_ID
+```
+
+### 4. Habilitar las APIs necesarias
+
+```bash
+gcloud services enable bigquery.googleapis.com storage.googleapis.com
+```
+
+### 5. Crear la infraestructura con Terraform
+
+```bash
+cd terraform/
+terraform init
+terraform apply -var="project_id=TU_PROJECT_ID"
+cd ..
+```
+
+Esto crea el bucket de GCS y los cuatro datasets de BigQuery.
+
+### 6. Ejecutar el pipeline
+
+```bash
+python run_pipeline.py
+```
+
+El orquestador ejecuta los 7 pasos en orden: generación de datos → subida a GCS → setup BigQuery → carga RAW → DWH → datamarts.
+
+---
+
+## Ejecución del pipeline
+
+El pipeline completo se controla desde un único punto de entrada:
+
+```bash
+# Pipeline completo
+python run_pipeline.py
+
+# Desde un paso en adelante (útil para reejecutar parcialmente)
+python run_pipeline.py --from dwh
+python run_pipeline.py --from load_raw
+
+# Un solo paso
+python run_pipeline.py --only generate
+```
+
+Pasos disponibles: `generate` · `upload` · `setup_datasets` · `setup_infra` · `load_raw` · `dwh` · `datamarts`
+
+La carga de datos es **incremental e idempotente**: el pipeline puede reejecutarse sin duplicar datos gracias a la tabla `infra.control_archivos_cargados` que registra cada archivo procesado.
+
+---
+
+## Tests
+
+Los tests unitarios cubren la lógica de negocio pura y no requieren conexión a GCP:
+
+```bash
+pip install -r requirements-dev.txt
+pytest tests/ -v
+```
+
+---
+
+## Dashboard
+
+Los datamarts se conectan a Looker Studio para la visualización de indicadores clave con foco en análisis de ventas, distribución geográfica, desempeño por producto y control de stock.
+
+[Ver dashboard en Looker Studio](https://lookerstudio.google.com/reporting/15bc3841-a472-4f1c-9b98-7ece170edba9/page/N89dF)
+
+---
+
+## Tecnologías
+
+Python · Google Cloud Storage · Google BigQuery · Terraform · SQL · Looker Studio
+
+---
+
+## Autores
+
+- **Emanuel Pinasco** · [LinkedIn](https://www.linkedin.com/in/bruno-inguanzo-974021212/)
+- **Matías Vergara** · [LinkedIn](https://www.linkedin.com/in/matiasvergaravicencio/)
